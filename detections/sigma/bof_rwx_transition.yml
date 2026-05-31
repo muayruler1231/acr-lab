@@ -1,0 +1,46 @@
+title: COFF/BOF Loader RW to RX Memory Transition
+id: a1b2c3d4-0001-4000-8000-000000000001
+status: experimental
+description: >
+  Detects an in-process VirtualAlloc(RW) followed by VirtualProtect(RX)
+  in a short time window within the same process region, consistent with
+  a COFF/BOF loader writing and then executing shellcode or a COFF object.
+  Lattice coff_loader.c performs exactly this sequence.
+references:
+  - https://github.com/muayruler1231/acr-lab/blob/main/agent/src/core/coff_loader.c
+author: Lattice Research
+date: 2026-05-31
+tags:
+  - attack.execution
+  - attack.t1059
+  - attack.defense_evasion
+  - attack.t1620
+logsource:
+  product: windows
+  category: process_creation
+  # Primary source: Microsoft-Windows-Threat-Intelligence ETW provider
+  # (requires ELAM/PPL sensor; e.g. Windows Defender ATP, CrowdStrike Falcon)
+detection:
+  selection_alloc:
+    EventID: 10
+    # ETW-TI AllocateVirtualMemory: Type=MEM_COMMIT, Protect=PAGE_READWRITE
+    Protect: '0x4'         # PAGE_READWRITE
+    AllocationType: '0x1000'  # MEM_COMMIT
+  selection_protect:
+    EventID: 11
+    # ETW-TI ProtectVirtualMemory: NewProtect=PAGE_EXECUTE_READ (0x20)
+    NewProtect: '0x20'     # PAGE_EXECUTE_READ
+  timeframe: 5s
+  condition: selection_alloc and selection_protect
+falsepositives:
+  - JIT compilers (Node.js, .NET CLR, Java HotSpot) perform similar transitions.
+    Filter by process name: exclude node.exe, dotnet.exe, java.exe, chrome.exe.
+  - Legitimate security software loading plugins.
+level: high
+fields:
+  - ProcessId
+  - ProcessName
+  - BaseAddress
+  - RegionSize
+  - Protect
+  - NewProtect

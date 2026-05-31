@@ -10,6 +10,17 @@ obj/
 *.exp
 *.lib
 
+# Go
+teamserver/vendor/
+teamserver/lattice.db
+
+# Go plugin binaries
+plugins/
+*.so
+
+# Protobuf generated files (regenerate with protoc)
+teamserver/proto/*.pb.go
+
 # Visual Studio
 .vs/
 *.user

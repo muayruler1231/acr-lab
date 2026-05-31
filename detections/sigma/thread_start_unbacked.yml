@@ -1,0 +1,51 @@
+title: Thread Started in Unbacked Private Executable Memory
+id: a1b2c3d4-0002-4000-8000-000000000002
+status: experimental
+description: >
+  Detects a new thread whose start address falls in a MEM_PRIVATE + PAGE_EXECUTE_READ
+  memory region with no file backing (no mapped image). This is the primary
+  indicator for in-process shellcode and PICO agents: even a pure PIC agent
+  with no PE on disk must execute from memory, and that memory will appear as
+  unbacked from the perspective of the kernel callback PsSetCreateThreadNotifyRoutine.
+references:
+  - https://github.com/muayruler1231/acr-lab/blob/main/research-report-pic-agents-edr.md
+author: Lattice Research
+date: 2026-05-31
+tags:
+  - attack.execution
+  - attack.t1055
+  - attack.defense_evasion
+  - attack.t1620
+logsource:
+  product: windows
+  # Source: Microsoft-Windows-Threat-Intelligence ETW-TI (PsCreateThread callback)
+  # or Sysmon EID 1 with start address + memory type enrichment
+  service: threat-intelligence
+detection:
+  selection:
+    EventID: 8   # Sysmon CreateRemoteThread; equivalent ETW-TI event varies by sensor
+    # Target thread start address in unbacked region:
+    #   Type: MEM_PRIVATE (0x20000)
+    #   Protect: PAGE_EXECUTE_READ (0x20)
+    #   MappedFile: null / empty
+  filter_known_jit:
+    TargetProcessName|endswith:
+      - '\node.exe'
+      - '\java.exe'
+      - '\chrome.exe'
+      - '\msedge.exe'
+      - '\firefox.exe'
+  condition: selection and not filter_known_jit
+falsepositives:
+  - JIT compilers (see filter above).
+  - .NET NativeAOT, ReadyToRun images allocated in private memory.
+  - Dynamic code generation in legitimate apps (e.g. AutoHotkey).
+level: high
+fields:
+  - SourceProcessId
+  - SourceProcessName
+  - TargetProcessId
+  - TargetProcessName
+  - StartAddress
+  - StartModule
+  - StartFunction

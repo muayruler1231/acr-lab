@@ -1,0 +1,47 @@
+title: Sleep Mask RW/RX Fluctuation in Executable Region
+id: a1b2c3d4-0003-4000-8000-000000000003
+status: experimental
+description: >
+  Detects a repeating RX→RW→RX VirtualProtect pattern on the same memory region,
+  consistent with a timer-queue APC or fiber-based sleep mask that encrypts the
+  agent image during the sleep interval. The flip rate correlates with the beacon
+  sleep interval. Tool: EtwTi-FluctuationMonitor by @_lpvoid (2023).
+references:
+  - https://github.com/muayruler1231/acr-lab/blob/main/agent/src/opsec/sleep_mask.c
+  - https://github.com/0xpat/EtwTi-FluctuationMonitor
+author: Lattice Research
+date: 2026-05-31
+tags:
+  - attack.defense_evasion
+  - attack.t1620
+  - attack.t1055.012
+logsource:
+  product: windows
+  service: threat-intelligence
+  # Source: ETW-TI ProtectVirtualMemory events
+detection:
+  selection_rx_to_rw:
+    EventID: 11  # ProtectVirtualMemory
+    OldProtect: '0x20'   # PAGE_EXECUTE_READ
+    NewProtect: '0x4'    # PAGE_READWRITE
+  selection_rw_to_rx:
+    EventID: 11
+    OldProtect: '0x4'
+    NewProtect: '0x20'
+  # Same BaseAddress, same ProcessId, within sleep interval window
+  timeframe: 300s
+  condition: selection_rx_to_rw and selection_rw_to_rx
+  # Heuristic: if this alternation repeats ≥3 times at a consistent interval,
+  # beacon sleep interval is the period. Compute MADM of interval timestamps.
+falsepositives:
+  - Some legitimate code hot-patching scenarios.
+  - Dynamic library loaders (rare).
+level: high
+fields:
+  - ProcessId
+  - ProcessName
+  - BaseAddress
+  - RegionSize
+  - OldProtect
+  - NewProtect
+  - Timestamp

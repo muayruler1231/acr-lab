@@ -1,0 +1,46 @@
+title: RITA Beacon Score High on Internal Host
+id: a1b2c3d4-0004-4000-8000-000000000004
+status: experimental
+description: >
+  Detects RITA (Real Intelligence Threat Analytics) assigning a beacon score
+  >= 0.7 to a connection from an internal host. RITA uses MADM (Median Absolute
+  Deviation of the Mean) of inter-connection intervals, skew, and session duration
+  to score beaconing behavior. A 30-second MADM threshold is the documented
+  detection point. This detection is content-independent — it fires regardless
+  of Malleable C2 profile customization, domain fronting, or JA4 spoofing.
+references:
+  - https://github.com/activecm/rita
+  - https://github.com/muayruler1231/acr-lab/blob/main/research-report-c2-landscape.md
+author: Lattice Research
+date: 2026-05-31
+tags:
+  - attack.command_and_control
+  - attack.t1071.001
+  - attack.t1571
+logsource:
+  product: zeek
+  service: conn
+  # Enriched by RITA output (beacon scoring pipeline)
+detection:
+  selection:
+    rita_beacon_score|gte: 0.7
+    id.orig_h|cidr: '10.0.0.0/8'    # adjust to your internal RFC1918 ranges
+  filter_known_good:
+    id.resp_h|cidr:
+      - '10.0.0.0/8'   # internal→internal is usually fine
+    # Exclude known update servers, telemetry endpoints:
+    # id.resp_p: [443, 80]
+    # id.resp_h: [known-update-server-IPs]
+  condition: selection and not filter_known_good
+falsepositives:
+  - Software update agents (Windows Update, antivirus DAT updates) with fixed schedules.
+  - Monitoring agents (Datadog, Splunk UF) with regular heartbeats.
+  - Add to known-good filter after investigation.
+level: high
+fields:
+  - id.orig_h
+  - id.resp_h
+  - id.resp_p
+  - rita_beacon_score
+  - rita_madm_seconds
+  - rita_connection_count

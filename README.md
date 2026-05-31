@@ -1,57 +1,81 @@
 # Lattice
 
-A small Windows internals exploration toolkit. Lattice is a user-mode console
-application for inspecting the live state of a Windows system — processes,
-threads, loaded modules, and selected pieces of system information exposed by
-the Native API. It is meant as a learning/reference project for Windows system
-programming.
+Security research C2 framework. Lab-only, authorized use.
 
-## What it does
+The thesis: understand how commercial EDRs detect implant activity, implement
+each offensive technique, and pair it with the exact telemetry that catches it.
+The end goal is a companion EDR design informed by operating the offensive side.
 
-- Enumerates running processes (via the ToolHelp snapshot API).
-- Lists loaded modules for a chosen process.
-- Demonstrates a documented use of `NtQuerySystemInformation` to read basic
-  system and performance information from `ntdll.dll`.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design.  
+See [`detections/`](detections/) for the companion EDR Sigma rules.  
+See the research reports for the literature review behind each design decision.
 
-Everything Lattice does relies on standard, documented Windows interfaces and
-information the calling user is already entitled to read. It does not modify
-other processes, inject code, or touch the kernel.
+---
 
-## Building
+## Repository layout
 
-Lattice targets Windows and requires the Windows SDK. It does **not** build on
-Linux/macOS.
+```
+teamserver/       Go team server (gRPC + REST + NATS)
+agent/            C PICO implant (no CRT, position-independent)
+bof/              BOF/COFF modules (CS beacon.h-compatible ABI)
+profiles/         3-plane JSON profiles (wire / operational / opsec)
+detections/       Sigma rules and ETW queries — companion EDR documentation
+src/              Windows internals demos (NtQuerySystemInformation, ToolHelp)
+include/          Headers for the demo scaffold
+research-report-*.md  Literature review reports
+ARCHITECTURE.md   Full system design document
+```
 
-### Visual Studio (CMake)
+---
+
+## Quick start
+
+### Team server (Go 1.22+)
+
+```bash
+cd teamserver
+go mod download
+go run ./cmd/lattice-server -grpc :50051 -rest :8080 -nats nats://127.0.0.1:4222
+```
+
+Requires a running NATS server:
+```bash
+docker run -p 4222:4222 nats:latest
+```
+
+### Agent (Windows, MSVC + CMake 3.20+)
 
 ```powershell
-cmake -B build -G "Visual Studio 17 2022" -A x64
+cd agent
+cmake -B build -G "Visual Studio 17 2022" -A x64 `
+    -DLATTICE_HOST=L\"192.168.1.100\" -DLATTICE_PORT=443
 cmake --build build --config Release
 ```
 
-The binary lands in `build\Release\lattice.exe`.
+### BOFs (CS beacon.h-compatible)
 
-### Command line (MSVC)
-
-```powershell
-cl /EHsc /std:c++17 /Iinclude src\*.cpp /Fe:lattice.exe
+Any C compiler targeting COFF output works:
+```bash
+# MinGW
+x86_64-w64-mingw32-gcc -c my_bof.c -I bof/include -o my_bof.o
+# MSVC
+cl /c my_bof.c /I bof\include /Fo:my_bof.obj
 ```
 
-## Usage
-
-```text
-lattice                 List all running processes.
-lattice modules <pid>   List loaded modules for the given process ID.
-lattice sysinfo         Print basic system information via the Native API.
-```
-
-## Layout
-
-```
-include/   Public headers
-src/       Implementation
-```
+---
 
 ## Status
 
-Early scaffold. See open work in the issue tracker.
+Active research scaffold. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for
+what is implemented vs. stubbed.
+
+| Component           | Status        |
+|---------------------|---------------|
+| Team server skeleton| Scaffolded    |
+| gRPC proto          | Defined       |
+| Agent comms loop    | Scaffolded    |
+| COFF/BOF loader     | Partial (SYNC only) |
+| HTTP transport      | Stub          |
+| Sleep mask          | Stub (plain)  |
+| Sigma detections    | 4 rules       |
+| 3-plane profiles    | Defined (JSON)|
